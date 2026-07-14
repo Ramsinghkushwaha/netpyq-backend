@@ -1,9 +1,8 @@
-// File: api/verifyPayment.js
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 
-// 1. CORS Setup
 export default async function handler(req, res) {
+    // Standard CORS headers
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*'); 
     res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
@@ -12,7 +11,9 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    // 2. Initialize Firebase Admin securely
+    // DEBUG: Log the body to see if it's arriving
+    console.log("Request Body:", req.body);
+
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
@@ -22,7 +23,12 @@ export default async function handler(req, res) {
 
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature, userId, planTier, amountPaid } = req.body;
 
-    // 3. Verify the Signature mathematically
+    // DEBUG: Check which variable is undefined
+    if (!razorpay_order_id || !razorpay_payment_id || !process.env.RAZORPAY_KEY_SECRET) {
+        console.error("Missing critical data:", { razorpay_order_id, razorpay_payment_id, secret_exists: !!process.env.RAZORPAY_KEY_SECRET });
+        return res.status(400).json({ error: "Missing data from frontend or secrets" });
+    }
+
     const secret = process.env.RAZORPAY_KEY_SECRET;
     const generated_signature = crypto
         .createHmac('sha256', secret)
@@ -30,30 +36,20 @@ export default async function handler(req, res) {
         .digest('hex');
 
     if (generated_signature === razorpay_signature) {
-        // 4. SIGNATURE IS VALID! Securely update Firestore
         try {
-            const userRef = db.collection('student_details').doc(userId);
-            
-            await userRef.set({
+            await db.collection('student_details').doc(userId).set({
                 isPaid: true,
                 planTier: planTier,
                 paymentId: razorpay_payment_id,
                 paymentDate: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
-            await userRef.collection('payment_history').add({
-                planTier: planTier,
-                amountPaid: amountPaid,
-                paymentId: razorpay_payment_id,
-                paymentDate: admin.firestore.FieldValue.serverTimestamp()
-            });
-
             res.status(200).json({ success: true });
         } catch (dbError) {
-            console.error("Database update failed:", dbError);
-            res.status(500).json({ success: false, error: 'Database update failed' });
+            console.error("DB Error:", dbError);
+            res.status(500).json({ error: 'Database update failed' });
         }
     } else {
-        res.status(400).json({ success: false, error: 'Invalid signature. Payment rejected.' });
+        res.status(400).json({ error: 'Invalid signature' });
     }
 }
