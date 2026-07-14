@@ -24,7 +24,7 @@ export default async function handler(req, res) {
         const { planPrice } = req.body; 
 
         // Set the final amount (in paise). Default to ₹49 if something goes wrong.
-        let finalAmount = 100; 
+        let finalAmount = 50; 
         if (planPrice === 99) {
             finalAmount = 9900; 
         } else if (planPrice === 1) {
