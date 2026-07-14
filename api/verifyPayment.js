@@ -1,9 +1,25 @@
-// File: api/verifyPayment.js
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 
-// 1. CORS Setup
+// 1. BULLETPROOF FIREBASE INITIALIZATION
+// We completely removed "admin.apps.length" because that is what is crashing Vercel.
+try {
+    admin.initializeApp({
+        credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+    });
+    console.log("Firebase initialized successfully.");
+} catch (error) {
+    // Vercel serverless functions often reuse memory. If Firebase is already initialized,
+    // it throws an "already exists" error. We just safely ignore it and continue!
+    if (!/already exists/u.test(error.message)) {
+        console.error("Firebase init error:", error);
+    }
+}
+
+const db = admin.firestore();
+
 export default async function handler(req, res) {
+    // 2. CORS Setup
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*'); 
     res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
@@ -12,26 +28,24 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    // 2. Initialize Firebase Admin securely
-    if (!admin.apps.length) {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-        });
-    }
-    const db = admin.firestore();
-
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature, userId, planTier, amountPaid } = req.body;
 
-    // 3. Verify the Signature mathematically
+    // 3. Verify Secrets Exist
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    const generated_signature = crypto
-        .createHmac('sha256', secret)
-        .update(razorpay_order_id + "|" + razorpay_payment_id)
-        .digest('hex');
+    if (!secret) {
+        console.error("CRITICAL: RAZORPAY_KEY_SECRET is missing in Vercel.");
+        return res.status(500).json({ error: "Server Configuration Error" });
+    }
 
-    if (generated_signature === razorpay_signature) {
-        // 4. SIGNATURE IS VALID! Securely update Firestore
-        try {
+    // 4. Verify Signature Mathematically
+    try {
+        const generated_signature = crypto
+            .createHmac('sha256', secret)
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest('hex');
+
+        if (generated_signature === razorpay_signature) {
+            // 5. SIGNATURE IS VALID! Securely update Firestore
             const userRef = db.collection('student_details').doc(userId);
             
             await userRef.set({
@@ -48,12 +62,12 @@ export default async function handler(req, res) {
                 paymentDate: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            res.status(200).json({ success: true });
-        } catch (dbError) {
-            console.error("Database update failed:", dbError);
-            res.status(500).json({ success: false, error: 'Database update failed' });
+            return res.status(200).json({ success: true });
+        } else {
+            return res.status(400).json({ success: false, error: 'Invalid signature. Payment rejected.' });
         }
-    } else {
-        res.status(400).json({ success: false, error: 'Invalid signature. Payment rejected.' });
+    } catch (err) {
+        console.error("Backend Execution Error:", err);
+        return res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
 }
