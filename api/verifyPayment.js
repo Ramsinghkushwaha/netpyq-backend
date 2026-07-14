@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const admin = require('firebase-admin');
 
 export default async function handler(req, res) {
-    // Standard CORS headers
+    // CORS Headers
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*'); 
     res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
@@ -11,25 +11,33 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    // DEBUG: Log the body to see if it's arriving
-    console.log("Request Body:", req.body);
-
+    // 1. Initialize Admin
     if (!admin.apps.length) {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-        });
+        try {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+        } catch (e) {
+            console.error("Firebase Init Error (Check your JSON format):", e);
+            return res.status(500).json({ error: "Firebase Init Failed" });
+        }
     }
-    const db = admin.firestore();
 
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature, userId, planTier, amountPaid } = req.body;
 
-    // DEBUG: Check which variable is undefined
-    if (!razorpay_order_id || !razorpay_payment_id || !process.env.RAZORPAY_KEY_SECRET) {
-        console.error("Missing critical data:", { razorpay_order_id, razorpay_payment_id, secret_exists: !!process.env.RAZORPAY_KEY_SECRET });
-        return res.status(400).json({ error: "Missing data from frontend or secrets" });
+    // 2. DEBUGGING: Check for missing variables
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    
+    console.log("DEBUG - Secret Exists:", !!secret);
+    console.log("DEBUG - Order ID:", razorpay_order_id);
+    console.log("DEBUG - Signature:", razorpay_signature);
+
+    if (!secret || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({ error: "Missing data or missing secret keys in Vercel Env Vars" });
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET;
+    // 3. Verify Signature
     const generated_signature = crypto
         .createHmac('sha256', secret)
         .update(razorpay_order_id + "|" + razorpay_payment_id)
@@ -37,6 +45,7 @@ export default async function handler(req, res) {
 
     if (generated_signature === razorpay_signature) {
         try {
+            const db = admin.firestore();
             await db.collection('student_details').doc(userId).set({
                 isPaid: true,
                 planTier: planTier,
