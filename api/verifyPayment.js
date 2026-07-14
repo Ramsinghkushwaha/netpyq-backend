@@ -1,22 +1,20 @@
 const crypto = require('crypto');
-const admin = require('firebase-admin');
+const { initializeApp, getApps, cert } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-// 1. BULLETPROOF FIREBASE INITIALIZATION
-// We completely removed "admin.apps.length" because that is what is crashing Vercel.
+// 1. MODERN FIREBASE INITIALIZATION (v14+)
 try {
-    admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-    });
-    console.log("Firebase initialized successfully.");
-} catch (error) {
-    // Vercel serverless functions often reuse memory. If Firebase is already initialized,
-    // it throws an "already exists" error. We just safely ignore it and continue!
-    if (!/already exists/u.test(error.message)) {
-        console.error("Firebase init error:", error);
+    if (!getApps().length) {
+        initializeApp({
+            credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+        });
+        console.log("Firebase initialized successfully.");
     }
+} catch (error) {
+    console.error("Firebase init error:", error);
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 export default async function handler(req, res) {
     // 2. CORS Setup
@@ -52,14 +50,14 @@ export default async function handler(req, res) {
                 isPaid: true,
                 planTier: planTier,
                 paymentId: razorpay_payment_id,
-                paymentDate: admin.firestore.FieldValue.serverTimestamp()
+                paymentDate: FieldValue.serverTimestamp()
             }, { merge: true });
 
             await userRef.collection('payment_history').add({
                 planTier: planTier,
                 amountPaid: amountPaid,
                 paymentId: razorpay_payment_id,
-                paymentDate: admin.firestore.FieldValue.serverTimestamp()
+                paymentDate: FieldValue.serverTimestamp()
             });
 
             return res.status(200).json({ success: true });
