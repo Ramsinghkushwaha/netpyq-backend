@@ -1,19 +1,8 @@
+// File: api/verifyPayment.js
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 
-// 1. USE A GLOBAL VARIABLE TO TRACK INIT (This never fails)
-if (!global.adminInitialized) {
-    try {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-        });
-        global.adminInitialized = true;
-        console.log("Firebase Admin Initialized successfully");
-    } catch (e) {
-        console.error("Firebase Init Failed:", e);
-    }
-}
-
+// 1. CORS Setup
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*'); 
@@ -23,33 +12,36 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+    // 2. Initialize Firebase Admin securely
+    if (!admin.apps.length) {
+        admin.initializeApp({
+            credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+        });
+    }
+    const db = admin.firestore();
+
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature, userId, planTier, amountPaid } = req.body;
 
+    // 3. Verify the Signature mathematically
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    
-    // Safety check for secrets
-    if (!secret) {
-        console.error("CRITICAL: RAZORPAY_KEY_SECRET is missing!");
-        return res.status(500).json({ error: "Backend secret missing" });
-    }
-
-    // Verify Signature
     const generated_signature = crypto
         .createHmac('sha256', secret)
         .update(razorpay_order_id + "|" + razorpay_payment_id)
         .digest('hex');
 
     if (generated_signature === razorpay_signature) {
+        // 4. SIGNATURE IS VALID! Securely update Firestore
         try {
-            const db = admin.firestore();
-            await db.collection('student_details').doc(userId).set({
+            const userRef = db.collection('student_details').doc(userId);
+            
+            await userRef.set({
                 isPaid: true,
                 planTier: planTier,
                 paymentId: razorpay_payment_id,
                 paymentDate: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
-            await db.collection('student_details').doc(userId).collection('payment_history').add({
+            await userRef.collection('payment_history').add({
                 planTier: planTier,
                 amountPaid: amountPaid,
                 paymentId: razorpay_payment_id,
@@ -58,10 +50,10 @@ export default async function handler(req, res) {
 
             res.status(200).json({ success: true });
         } catch (dbError) {
-            console.error("DB Error:", dbError);
-            res.status(500).json({ error: 'Database update failed' });
+            console.error("Database update failed:", dbError);
+            res.status(500).json({ success: false, error: 'Database update failed' });
         }
     } else {
-        res.status(400).json({ error: 'Invalid signature' });
+        res.status(400).json({ success: false, error: 'Invalid signature. Payment rejected.' });
     }
 }
