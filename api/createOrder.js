@@ -27,6 +27,8 @@ export default async function handler(req, res) {
         let finalAmount = 4900; 
         if (planPrice === 99) {
             finalAmount = 9900; 
+        } else if (planPrice === 1) {
+            finalAmount = 100; // 100 paise = 1 Rupee for Live Testing!
         }
 
         const options = {
