@@ -1,9 +1,9 @@
-const { initializeApp, getApps, cert } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
-const { getFirestore } = require('firebase-admin/firestore');
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 export default async function handler(req, res) {
-  // 1. SET CORS HEADERS IMMEDIATELY
+  // 1. SET CORS HEADERS IMMEDIATELY (Prevents "Failed to fetch" masking)
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin || '*';
   
@@ -24,8 +24,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 2. RUN LOGIC INSIDE TRY/CATCH
+  // 2. PUT LOGIC INSIDE A TRY/CATCH SO THE BROWSER GETS THE REAL ERROR
   try {
+    // Check for missing Environment Variable
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Vercel Error: FIREBASE_SERVICE_ACCOUNT environment variable is missing!");
+    }
+
     // Initialize Firebase safely
     if (!getApps().length) {
       initializeApp({ 
@@ -70,7 +75,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("Server Error:", err);
-    // If it fails here, it sends a proper 500 error back to the browser WITH the CORS headers attached
+    // This guarantees the frontend alerts the REAL error instead of "Failed to fetch"
     return res.status(500).json({ error: err.message });
   }
 }
