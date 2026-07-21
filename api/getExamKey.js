@@ -4,7 +4,12 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 module.exports = async function handler(req, res) {
   // 1. BULLETPROOF CORS
-  const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
+  // Add your new clean domain to this list!
+  const allowedOrigins = [
+    'https://netpyq.web.app',      // Your new clean domain
+    'https://netpyq-552ad.web.app', // Your old one (safe to keep for now)
+    'http://127.0.0.1:5500'
+  ];
   const origin = req.headers.origin || '*';
   
   if (allowedOrigins.includes(origin)) {
