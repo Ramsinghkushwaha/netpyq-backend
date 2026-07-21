@@ -1,9 +1,9 @@
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
-// Notice: We are NOT requiring 'firebase-admin/auth' at the top!
 
 module.exports = async function handler(req, res) {
-  // 1. BULLETPROOF CORS
+  // 1. SET CORS HEADERS IMMEDIATELY
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin || '*';
   
@@ -27,18 +27,13 @@ module.exports = async function handler(req, res) {
   try {
     // 2. Initialize Firebase safely
     if (!getApps().length) {
-      initializeApp({
-        credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+      initializeApp({ 
+        credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) 
       });
     }
 
-    // Use the correct v12 syntax for Firestore
-    const db = getFirestore();
-    
-    // 3. THE MAGIC TRICK: Dynamic Import for Auth
-    // This completely bypasses the Vercel 'jose' ESM crash!
-    const { getAuth } = await import('firebase-admin/auth');
     const auth = getAuth();
+    const db = getFirestore();
 
     const { paperId, idToken } = req.body;
     if (!paperId || !idToken) {
