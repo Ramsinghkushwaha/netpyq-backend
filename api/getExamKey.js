@@ -3,7 +3,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
 module.exports = async function handler(req, res) {
-  // 1. SET CORS HEADERS IMMEDIATELY
+  // 1. BULLETPROOF CORS
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin || '*';
   
@@ -15,7 +15,6 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  // Handle CORS Preflight instantly
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
