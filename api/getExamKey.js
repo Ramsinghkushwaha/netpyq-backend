@@ -1,17 +1,9 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+const admin = require('firebase-admin');
 
-export default async function handler(req, res) {
-  // 1. SET CORS HEADERS IMMEDIATELY
-  const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
+module.exports = async function handler(req, res) {
+  // 1. BULLETPROOF CORS
   const origin = req.headers.origin || '*';
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); 
-  }
+  res.setHeader('Access-Control-Allow-Origin', origin); 
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -24,21 +16,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 2. RUN LOGIC INSIDE TRY/CATCH
   try {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-      throw new Error("Vercel Error: FIREBASE_SERVICE_ACCOUNT is missing!");
-    }
-
-    // Initialize Firebase safely
-    if (!getApps().length) {
-      initializeApp({ 
-        credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) 
+    // 2. INITIALIZE FIREBASE (Using Monolithic Import to bypass Vercel ESM bug)
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
       });
     }
 
-    const auth = getAuth();
-    const db = getFirestore();
+    const db = admin.firestore();
+    const auth = admin.auth();
 
     const { paperId, idToken } = req.body;
     if (!paperId || !idToken) {
@@ -74,7 +61,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("Server Error:", err);
-    // This guarantees the frontend alerts the REAL error instead of "Failed to fetch"
     return res.status(500).json({ error: err.message });
   }
-}
+};
