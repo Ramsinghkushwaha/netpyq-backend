@@ -26,6 +26,10 @@ export default async function handler(req, res) {
 
   // 2. RUN LOGIC INSIDE TRY/CATCH
   try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Vercel Error: FIREBASE_SERVICE_ACCOUNT is missing!");
+    }
+
     // Initialize Firebase safely
     if (!getApps().length) {
       initializeApp({ 
@@ -70,7 +74,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("Server Error:", err);
-    // If it fails here, it sends a proper 500 error back to the browser WITH the CORS headers attached
+    // This guarantees the frontend alerts the REAL error instead of "Failed to fetch"
     return res.status(500).json({ error: err.message });
   }
 }
