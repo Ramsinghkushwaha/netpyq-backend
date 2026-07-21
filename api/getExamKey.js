@@ -2,29 +2,16 @@ const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
-// Initialize Firebase Admin if it isn't already running
-if (!getApps().length) {
-  initializeApp({ 
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) 
-  });
-}
-
-const auth = getAuth();
-const db = getFirestore();
-
-// STRICT NODE.JS EXPORT (Prevents Vercel 500 crash)
 module.exports = async function handler(req, res) {
-  
-  // --- BULLETPROOF CORS ---
+  // 1. SET CORS HEADERS IMMEDIATELY (Prevents "Failed to fetch" masking)
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
-  const origin = req.headers.origin;
+  const origin = req.headers.origin || '*';
   
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); // Fallback
+    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); 
   }
-  
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -33,38 +20,52 @@ module.exports = async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Ensure it's a POST request
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { paperId, idToken } = req.body;
-  if (!paperId || !idToken) {
-    return res.status(400).json({ error: 'Missing paperId or idToken' });
-  }
-
+  // 2. PUT LOGIC INSIDE A TRY/CATCH SO THE BROWSER GETS THE REAL ERROR
   try {
-    // 1. Verify the student is genuinely logged into Firebase
+    // Check for missing Environment Variable
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Vercel Error: FIREBASE_SERVICE_ACCOUNT environment variable is missing!");
+    }
+
+    // Initialize Firebase safely
+    if (!getApps().length) {
+      initializeApp({ 
+        credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) 
+      });
+    }
+
+    const auth = getAuth();
+    const db = getFirestore();
+
+    const { paperId, idToken } = req.body;
+    if (!paperId || !idToken) {
+      return res.status(400).json({ error: 'Missing paperId or idToken' });
+    }
+
+    // Verify Student Token
     const decoded = await auth.verifyIdToken(idToken); 
     const uid = decoded.uid;
 
-    // 2. Check if the paper is a Free Paper
+    // Check if Free Paper
     const metaDoc = await db.collection('paper_metadata').doc(paperId).get();
     const isFree = metaDoc.exists && metaDoc.data().isFree === true;
 
-    // 3. If it's a Premium paper, verify the user actually paid
+    // Verify Premium Status
     let isPaid = false;
     if (!isFree) {
       const userDoc = await db.collection('student_details').doc(uid).get();
       isPaid = userDoc.exists && userDoc.data().isPaid === true;
     }
 
-    // 4. Gatekeeper: Kick them out if they haven't paid for a premium test
     if (!isFree && !isPaid) {
       return res.status(403).json({ error: 'Not authorized to access this premium paper' });
     }
 
-    // 5. Success! Fetch the secret key and hand it to the student's browser
+    // Fetch Secret Key
     const keyDoc = await db.collection('paper_keys').doc(paperId).get();
     if (!keyDoc.exists) {
       return res.status(404).json({ error: 'Encryption key not found on server' });
@@ -73,7 +74,8 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ key: keyDoc.data().key });
 
   } catch (err) {
-    console.error("Key Fetch Error:", err);
-    return res.status(401).json({ error: 'Invalid authentication or token expired' });
+    console.error("Server Error:", err);
+    // This guarantees the frontend alerts the REAL error instead of "Failed to fetch"
+    return res.status(500).json({ error: err.message });
   }
 };
