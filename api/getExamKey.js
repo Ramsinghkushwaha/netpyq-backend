@@ -1,9 +1,33 @@
-const admin = require('firebase-admin');
+let admin = require('firebase-admin');
+
+// 1. Handle Vercel's packaging quirk
+if (admin.default) {
+  admin = admin.default;
+}
+
+// 2. Bulletproof Serverless Initialization (No .length checks!)
+try {
+  admin.initializeApp({
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+  });
+} catch (error) {
+  // Serverless functions run this file multiple times. 
+  // If Firebase is already initialized, it throws an error. We safely ignore it!
+  if (!/already exists/i.test(error.message)) {
+    console.error('Firebase initialization error', error);
+  }
+}
 
 module.exports = async function handler(req, res) {
-  // 1. BULLETPROOF CORS
+  // --- BULLETPROOF CORS ---
+  const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin); 
+  
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); 
+  }
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -17,13 +41,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // 2. INITIALIZE FIREBASE (Using Monolithic Import to bypass Vercel ESM bug)
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-      });
-    }
-
     const db = admin.firestore();
     const auth = admin.auth();
 
