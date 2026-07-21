@@ -1,25 +1,9 @@
-let admin = require('firebase-admin');
-
-// 1. Handle Vercel's packaging quirk
-if (admin.default) {
-  admin = admin.default;
-}
-
-// 2. Bulletproof Serverless Initialization (No .length checks!)
-try {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-  });
-} catch (error) {
-  // Serverless functions run this file multiple times. 
-  // If Firebase is already initialized, it throws an error. We safely ignore it!
-  if (!/already exists/i.test(error.message)) {
-    console.error('Firebase initialization error', error);
-  }
-}
+const { initializeApp, getApps, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+// Notice: We are NOT requiring 'firebase-admin/auth' at the top!
 
 module.exports = async function handler(req, res) {
-  // --- BULLETPROOF CORS ---
+  // 1. BULLETPROOF CORS
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin || '*';
   
@@ -41,8 +25,20 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const db = admin.firestore();
-    const auth = admin.auth();
+    // 2. Initialize Firebase safely
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+      });
+    }
+
+    // Use the correct v12 syntax for Firestore
+    const db = getFirestore();
+    
+    // 3. THE MAGIC TRICK: Dynamic Import for Auth
+    // This completely bypasses the Vercel 'jose' ESM crash!
+    const { getAuth } = await import('firebase-admin/auth');
+    const auth = getAuth();
 
     const { paperId, idToken } = req.body;
     if (!paperId || !idToken) {
