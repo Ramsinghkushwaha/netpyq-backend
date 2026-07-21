@@ -14,7 +14,14 @@ const db = getFirestore();
 
 export default async function handler(req, res) {
   // CORS Setup: ONLY allow requests from your specific domain
-  res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); 
+  // Allows your live site and your local live server to fetch keys
+  const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); // Default fallback
+  } 
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
