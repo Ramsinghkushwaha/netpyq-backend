@@ -11,7 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "firebase-admin": "^14.1.0",
+    "firebase-admin": "11.11.0",
     "razorpay": "^2.9.6"
   }
 }
