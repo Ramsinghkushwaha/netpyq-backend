@@ -12,24 +12,36 @@ if (!getApps().length) {
 const auth = getAuth();
 const db = getFirestore();
 
-export default async function handler(req, res) {
-  // CORS Setup: ONLY allow requests from your specific domain
-  // Allows your live site and your local live server to fetch keys
+// STRICT NODE.JS EXPORT (Prevents Vercel 500 crash)
+module.exports = async function handler(req, res) {
+  
+  // --- BULLETPROOF CORS ---
   const allowedOrigins = ['https://netpyq-552ad.web.app', 'http://127.0.0.1:5500'];
   const origin = req.headers.origin;
+  
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); // Default fallback
-  } 
-  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq-552ad.web.app'); // Fallback
+  }
   
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle CORS Preflight instantly
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Ensure it's a POST request
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { paperId, idToken } = req.body;
-  if (!paperId || !idToken) return res.status(400).json({ error: 'Missing paperId or idToken' });
+  if (!paperId || !idToken) {
+    return res.status(400).json({ error: 'Missing paperId or idToken' });
+  }
 
   try {
     // 1. Verify the student is genuinely logged into Firebase
@@ -54,7 +66,9 @@ export default async function handler(req, res) {
 
     // 5. Success! Fetch the secret key and hand it to the student's browser
     const keyDoc = await db.collection('paper_keys').doc(paperId).get();
-    if (!keyDoc.exists) return res.status(404).json({ error: 'Encryption key not found on server' });
+    if (!keyDoc.exists) {
+      return res.status(404).json({ error: 'Encryption key not found on server' });
+    }
 
     return res.status(200).json({ key: keyDoc.data().key });
 
@@ -62,4 +76,4 @@ export default async function handler(req, res) {
     console.error("Key Fetch Error:", err);
     return res.status(401).json({ error: 'Invalid authentication or token expired' });
   }
-}
+};
