@@ -4,10 +4,9 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 module.exports = async function handler(req, res) {
   // 1. BULLETPROOF CORS
-  // Add your new clean domain to this list!
   const allowedOrigins = [
-    'https://netpyq.web.app',      // Your new clean domain
-    'https://netpyq-552ad.web.app', // Your old one (safe to keep for now)
+    'https://netpyq.web.app',      
+    'https://netpyq-552ad.web.app', 
     'http://127.0.0.1:5500'
   ];
   const origin = req.headers.origin || '*';
@@ -39,36 +38,56 @@ module.exports = async function handler(req, res) {
     const auth = getAuth();
     const db = getFirestore();
 
-    const { paperId, idToken } = req.body;
-    if (!paperId || !idToken) {
-      return res.status(400).json({ error: 'Missing paperId or idToken' });
+    // EXPECT subjectId FROM THE FRONTEND
+    const { subjectId, paperId, idToken } = req.body;
+    if (!subjectId || !paperId || !idToken) {
+      return res.status(400).json({ error: 'Missing required parameters' });
     }
 
     // Verify Student Token
     const decoded = await auth.verifyIdToken(idToken); 
     const uid = decoded.uid;
 
-    // Check if Free Paper
-    const metaDoc = await db.collection('paper_metadata').doc(paperId).get();
-    const isFree = metaDoc.exists && metaDoc.data().isFree === true;
+    // 3. SPEED OPTIMIZATION: Fetch Metadata, Key, and User Profile simultaneously
+    const [metaDoc, keyDoc, userDoc] = await Promise.all([
+        db.collection('paper_metadata').doc(subjectId).get(),
+        db.collection('paper_keys').doc(paperId).get(),
+        db.collection('student_details').doc(uid).get()
+    ]);
 
-    // Verify Premium Status
-    let isPaid = false;
-    if (!isFree) {
-      const userDoc = await db.collection('student_details').doc(uid).get();
-      isPaid = userDoc.exists && userDoc.data().isPaid === true;
-    }
-
-    if (!isFree && !isPaid) {
-      return res.status(403).json({ error: 'Not authorized to access this premium paper' });
-    }
-
-    // Fetch Secret Key
-    const keyDoc = await db.collection('paper_keys').doc(paperId).get();
     if (!keyDoc.exists) {
       return res.status(404).json({ error: 'Encryption key not found on server' });
     }
 
+    // 4. Check if the paper is Free in the NEW nested structure
+    const subjectMeta = metaDoc.exists ? metaDoc.data() : {};
+    const paperMeta = subjectMeta[paperId] || {};
+    const isFree = paperMeta.isFree === true;
+
+    // 5. ENTITLEMENT & EXPIRATION CHECK
+    if (!isFree) {
+        if (!userDoc.exists) {
+            return res.status(403).json({ error: 'Premium access required. Please upgrade your plan.' });
+        }
+        
+        const userData = userDoc.data();
+        
+        if (userData.isPaid !== true || !userData.paymentDate) {
+            return res.status(403).json({ error: 'Premium access required. Please upgrade your plan.' });
+        }
+
+        // Calculate Expiration
+        const payDate = userData.paymentDate.toDate();
+        const monthsToAdd = userData.planTier === "Gold" ? 24 : 6;
+        const expDate = new Date(payDate);
+        expDate.setMonth(expDate.getMonth() + monthsToAdd);
+
+        if (new Date() > expDate) {
+            return res.status(403).json({ error: 'Your premium plan has expired. Please renew to access this paper.' });
+        }
+    }
+
+    // 6. SUCCESS! Hand over the decryption key
     return res.status(200).json({ key: keyDoc.data().key });
 
   } catch (err) {
