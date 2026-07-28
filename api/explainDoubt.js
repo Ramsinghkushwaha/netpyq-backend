@@ -28,9 +28,13 @@ export default async function handler(req, res) {
       Official Explanation (if any): ${questionObj.explanation || 'None provided'}
 
       Provide a JSON response with exactly these three keys:
-      "coreConcept": A short paragraph explaining the foundational concept being tested. Use HTML tags like <strong> for bolding instead of markdown asterisks.
-      "whyCorrect": Explain exactly why the correct option is right. Use HTML tags like <strong> for bolding instead of markdown asterisks.
-      "whyIncorrect": Explain why the other distractor options are wrong. Use HTML tags like <strong> for bolding instead of markdown asterisks.
+      "coreConcept": A short paragraph explaining the foundational concept being tested. Use HTML tags like <strong> for bolding instead of markdown.
+      "whyCorrect": Explain exactly why the correct option is right. Use HTML tags like <strong> for bolding instead of markdown.
+      "whyIncorrect": Explain why the other distractor options are wrong. Use HTML tags like <strong> for bolding instead of markdown.
+
+      CRITICAL FORMATTING RULES:
+      1. Ensure proper spaces between all words. Never jam words together (e.g. write "cost price (CP)" instead of "cost price(CP)").
+      2. Every single mathematical expression, variable, fraction, or symbol (such as CP, SP, percentages, or equations) MUST be fully wrapped in single dollar signs (e.g. $CP$, $SP$, $\frac{10}{9}$, $\times 100$). Never output raw LaTeX backslashes without enclosing them in $.
     `;
 
     // Updated to the current active model: gemini-3.5-flash
