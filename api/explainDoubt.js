@@ -1,16 +1,13 @@
 export default async function handler(req, res) {
-  // 1. Setup CORS so your frontend portal can talk to it
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Reject anything that isn't a POST request
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -23,7 +20,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing GEMINI_API_KEY environment variable in Vercel" });
     }
 
-    // 2. Build the exact prompt for Gemini
     const promptText = `
       You are an expert tutor for a competitive exam. Break down this multiple-choice question for a student.
       Question: ${questionObj.question || 'Image/Match based question'}
@@ -37,7 +33,6 @@ export default async function handler(req, res) {
       "whyIncorrect": Explain why the other distractor options are wrong.
     `;
 
-    // 3. Call Google Gemini 1.5 Flash
     const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,17 +42,19 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!geminiRes.ok) throw new Error("Failed to connect to Gemini");
+    if (!geminiRes.ok) {
+      const errorDetails = await geminiRes.text();
+      throw new Error(`Google API responded with status ${geminiRes.status}: ${errorDetails}`);
+    }
 
     const data = await geminiRes.json();
     const aiText = data.candidates[0].content.parts[0].text;
     const aiJson = JSON.parse(aiText);
 
-    // 4. Send the dynamic breakdown back to the frontend
     return res.status(200).json(aiJson);
 
   } catch (error) {
-    console.error("AI Error:", error);
-    return res.status(500).json({ error: "Failed to generate AI response" });
+    console.error("AI Error:", error.message);
+    return res.status(500).json({ error: error.message });
   }
 }
