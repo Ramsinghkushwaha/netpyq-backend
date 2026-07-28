@@ -28,9 +28,9 @@ export default async function handler(req, res) {
       Official Explanation (if any): ${questionObj.explanation || 'None provided'}
 
       Provide a JSON response with exactly these three keys:
-      "coreConcept": A short paragraph explaining the foundational concept being tested.
-      "whyCorrect": Explain exactly why the correct option is right.
-      "whyIncorrect": Explain why the other distractor options are wrong.
+      "coreConcept": A short paragraph explaining the foundational concept being tested. Use HTML tags like <strong> for bolding instead of markdown asterisks.
+      "whyCorrect": Explain exactly why the correct option is right. Use HTML tags like <strong> for bolding instead of markdown asterisks.
+      "whyIncorrect": Explain why the other distractor options are wrong. Use HTML tags like <strong> for bolding instead of markdown asterisks.
     `;
 
     // Updated to the current active model: gemini-3.5-flash
