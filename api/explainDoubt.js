@@ -1,23 +1,40 @@
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+// THIS IS THE MAGIC LINE: It switches Vercel to the Edge Runtime, bypassing the 10s timeout.
+export const config = {
+  runtime: 'edge', 
+};
 
+export default async function handler(req) {
+  // CORS Headers for Edge
+  const corsHeaders = {
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,OPTIONS,PATCH,DELETE,POST,PUT',
+    'Access-Control-Allow-Headers': 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  };
+
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  // Reject anything that isn't a POST request
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { 
+      status: 405, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 
   try {
-    const questionObj = req.body;
+    // In Edge, you must manually parse the JSON body
+    const questionObj = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: "Missing GEMINI_API_KEY environment variable in Vercel" });
+      return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY environment variable in Vercel" }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const promptText = `
@@ -34,10 +51,9 @@ export default async function handler(req, res) {
 
       CRITICAL FORMATTING RULES:
       1. Ensure proper spaces between all words. Never jam words together (e.g. write "cost price (CP)" instead of "cost price(CP)").
-      2. Every single mathematical expression, variable, fraction, or symbol (such as CP, SP, percentages, or equations) MUST be fully wrapped in single dollar signs (e.g. $CP$, $SP$, $\frac{10}{9}$, $\times 100$). Never output raw LaTeX backslashes without enclosing them in $.
+      2. Every single mathematical expression, variable, fraction, or symbol (such as CP, SP, percentages, or equations) MUST be fully wrapped in single dollar signs (e.g. $CP$, $SP$, $\\frac{10}{9}$, $\\times 100$). Never output raw LaTeX backslashes without enclosing them in $.
     `;
 
-    // Updated to the current active model: gemini-3.5-flash
     const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,10 +72,17 @@ export default async function handler(req, res) {
     const aiText = data.candidates[0].content.parts[0].text;
     const aiJson = JSON.parse(aiText);
 
-    return res.status(200).json(aiJson);
+    // Return the successful AI response
+    return new Response(JSON.stringify(aiJson), { 
+      status: 200, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
 
   } catch (error) {
     console.error("AI Error:", error.message);
-    return res.status(500).json({ error: error.message });
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 }
