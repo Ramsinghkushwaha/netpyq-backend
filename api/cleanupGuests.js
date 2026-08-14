@@ -10,12 +10,22 @@ module.exports = async function handler(req, res) {
     'http://127.0.0.1:5500'
   ];
   const origin = req.headers.origin || '*';
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://netpyq.web.app'); 
+
+function isAllowedOrigin(o) {
+  if (!o) return false;
+  if (allowedOrigins.includes(o)) return true;
+  try {
+    return new URL(o).hostname.endsWith('.webcontainer.io'); // StackBlitz preview, any session
+  } catch {
+    return false;
   }
+}
+
+if (isAllowedOrigin(origin)) {
+  res.setHeader('Access-Control-Allow-Origin', origin);
+} else {
+  res.setHeader('Access-Control-Allow-Origin', 'https://netpyq.web.app');
+}
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
