@@ -76,10 +76,9 @@ if (isAllowedOrigin(origin)) {
                 await batch.commit();
             }
 
-            // B. Delete their Profile and Sub-collections
-            await db.collection("student_details").doc(user.uid).collection("active_exam").doc("current").delete().catch(()=>{});
-            await db.collection("student_details").doc(user.uid).collection("bookmarks").doc("master_bookmarks").delete().catch(()=>{});
-            await db.collection("student_details").doc(user.uid).delete().catch(()=>{});
+            // B. Delete their Profile and ALL Sub-collections (recursive — covers active_exam,
+            // bookmarks, study_tracker, syllabus, notifications, and anything added later)
+            await db.recursiveDelete(db.collection("student_details").doc(user.uid));
 
             // C. Delete the Auth Account itself
             await auth.deleteUser(user.uid);
